@@ -1,0 +1,28 @@
+name:                make-package
+version:             1.0.0
+synopsis:            Make a Cabal package
+description:         Make a Cabal package
+license:             BSD3
+license-file:        LICENSE
+author:              Chris Done
+maintainer:          chrisdone@gmail.com
+category:            Development
+build-type:          Simple
+cabal-version:       >=1.8
+data-files:          files/package.cabal
+                     files/LICENSE
+                     files/Setup.hs
+                     files/dot-gitignore
+                     files/Main.hs
+
+executable make-package
+  hs-source-dirs:    src
+  main-is:           Main.hs
+  build-depends:     base >= 4 && < 5,
+                     template,
+                     text,
+                     bytestring,
+                     time,
+                     time-lens,
+                     process,
+                     directory
