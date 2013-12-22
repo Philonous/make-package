@@ -22,11 +22,14 @@ data-files:          files/package.cabal
 executable make-package
   hs-source-dirs:    src
   main-is:           Main.hs
+  other-modules:     Github
+                   , IO
   build-depends:     base >= 4 && < 5,
                      bytestring,
                      configurator,
                      directory,
                      filepath,
+                     github,
                      haskeline,
                      mtl,
                      process,
