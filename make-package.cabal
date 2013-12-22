@@ -10,7 +10,9 @@ category:            Development
 build-type:          Simple
 cabal-version:       >=1.8
 data-files:          files/package.cabal
-                     files/LICENSE
+                     files/licenses/Apache-2.0.license
+                     files/licenses/BSD3.license
+                     files/licenses/MIT.license
                      files/Setup.hs
                      files/dot-gitignore
                      files/Main.hs
@@ -21,9 +23,12 @@ executable make-package
   hs-source-dirs:    src
   main-is:           Main.hs
   build-depends:     base >= 4 && < 5,
-                     text,
                      bytestring,
-                     time,
-                     time-lens,
+                     directory,
+                     filepath,
+                     haskeline,
+                     mtl,
                      process,
-                     directory
+                     text,
+                     time,
+                     time-lens
