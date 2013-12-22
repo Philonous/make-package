@@ -8,13 +8,19 @@ module IO where
 
 import           Control.Applicative ((<$>))
 import           Control.Monad.Reader
+import           Control.Monad.State
 import           Data.Char (isSpace)
 import qualified Data.Configurator as Conf
 import qualified Data.Configurator.Types as Conf
 import           Data.List (isPrefixOf, isSuffixOf)
+import           Data.Map (Map)
+import qualified Data.Map as Map
 import           Data.Monoid
+import           Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import           System.Console.Haskeline as HL
+import           System.Console.Haskeline.MonadException()
 import           System.Directory
 import           System.Exit
 import           System.FilePath
@@ -22,43 +28,65 @@ import           System.Process
 
 import           Paths_make_package
 
-newtype MakePackage a = MP {unConf :: ReaderT Conf.Config IO a}
-                        deriving (Monad, MonadIO, Functor, MonadException)
+newtype MakePackage a = MP {unConf :: StateT (Map Text Text)
+                                      (ReaderT Conf.Config IO)
+                                      a}
+                        deriving (Monad, MonadIO, Functor)
 
 withConfig :: MakePackage a -> IO a
 withConfig (MP f) = do conf <- loadConfig
-                       runReaderT f conf
-
-
-getConf :: MakePackage Conf.Config
-getConf = MP ask
+                       fst <$> (runReaderT (runStateT f (Map.empty)) conf)
 
 confLookup :: Conf.Configured a => Conf.Name -> MakePackage (Maybe a)
-confLookup c = getConf >>= liftIO . (`Conf.lookup` c)
+confLookup c =
+  do cache <- MP get
+     case Conf.convert . Conf.String =<< Map.lookup c cache of
+         Nothing -> liftIO . (`Conf.lookup` c) =<< MP ask
+         Just x -> return $ Just x
+
 
 
 -- | Prompt user
 prompt :: T.Text -> MakePackage T.Text
-prompt p = runInputT defaultSettings $ do
+prompt p = liftIO $ runInputT defaultSettings $ do
     ln <- HL.getInputLine (T.unpack $ p <> "> ")
     case ln of
-        Nothing -> liftIO $ exitFailure
+        Nothing -> liftIO exitFailure
         Just line -> return $ T.pack line
 
+
+promptYesNo :: T.Text -> MakePackage Bool
+promptYesNo p = liftIO $ do T.putStrLn p
+                            runInputT defaultSettings go
+  where
+    go = do char <- getInputChar ("[y]yes or [n]o> ")
+            case char of
+                Nothing -> liftIO exitFailure
+                Just 'y' -> return True
+                Just 'Y' -> return True
+                Just 'n' -> return False
+                Just 'N' -> return False
+                _   -> go
+
 -- | Get option from configuration file or prompt user
-confOrPrompt :: T.Text -> MakePackage T.Text
-confOrPrompt p = confLookup p >>= \case
-    Nothing -> prompt p
+confOrPrompt :: T.Text -> T.Text -> MakePackage T.Text
+confOrPrompt c p = confLookup c >>= \case
+    Nothing -> do x <- prompt p
+                  MP $ modify (Map.insert c x)
+                  return x
     Just x  -> return x
 
 -- | Get option from configuration file, git configuration or promp user
 confOrGitOrPrompt :: T.Text -> T.Text -> T.Text -> MakePackage T.Text
 confOrGitOrPrompt c gitQ p = confLookup c >>= \case
     Just x -> return x
-    Nothing -> confLookup "use-git" >>= \case
+    Nothing -> confLookup "git.enable" >>= \case
                Just True -> queryGit (T.unpack gitQ) >>= \case
-                   Just x -> return x
-                   Nothing -> prompt p
+                   Just x -> do MP $ modify (Map.insert c x)
+                                return x
+                   Nothing -> do x <- prompt p
+                                 MP $ modify (Map.insert c x)
+                                 return x
                _ -> prompt p
 
 -- | Get license from configuration or prompt
@@ -83,12 +111,10 @@ getLicense = do
 queryGit :: String -> MakePackage (Maybe T.Text)
 queryGit q = liftIO (readProcessWithExitCode "git" ["config","--get", q] "")
              >>= \case
-    (ExitSuccess, res, _stderr) -> return . Just $ T.pack res
+    (ExitSuccess, res, _stderr) -> return . Just $ oneLine res
     _ -> return Nothing
   where
-    get :: FilePath -> [String] -> MakePackage T.Text
-    get prog args = liftIO $ fmap (T.concat . take 1 . T.lines . T.pack)
-                         (readProcess prog args "")
+    oneLine = T.concat . take 1 . T.lines . T.pack
 
 -- | Run a programm, exit with error when program returns failure code
 run :: String -> [String] -> MakePackage ()
@@ -135,7 +161,7 @@ selectFrom :: String -> [String] -> MakePackage String
 selectFrom p xs = liftIO $ do
     runInputT (setComplete cf defaultSettings) (HL.outputStrLn options >> go)
   where
-    pairs = zip (map show [1..]) xs
+    pairs = zip (map show [1:: Int ..]) xs
     options = unlines $ map (\(l,r) -> l <> ") " <> r ) pairs
     cf = completeWord Nothing " "
            (\wd -> return $ simpleCompletion <$> filter (wd `isPrefixOf`) xs)

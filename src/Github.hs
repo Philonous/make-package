@@ -1,3 +1,74 @@
+{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
+
 module Github where
 
-import Github.Repos
+import           Control.Applicative ((<$>))
+import           Control.Monad
+import           Control.Monad.Trans
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import           Github.Repos
+import           System.Console.Haskeline as HL
+import           System.Exit (exitSuccess)
+import           System.Timeout
+
+import           IO
+
+maybeClone :: T.Text -> MakePackage ()
+maybeClone repo = unlessConf "github.enable" (== False) $
+                  unlessConf "github.never-clone" (== True) $ do
+    uname <- confOrPrompt "github.username" "Github Username"
+    liftIO $ putStrLn "Checking github for preexisting repos"
+    timeoutDelay <- toSeconds <$> confLookup "github.timeout"
+    mbRepoUrl <- liftIO . timeout timeoutDelay $ getRepo uname
+    case mbRepoUrl of
+        Nothing -> return ()
+        Just (Left _) -> return ()
+        Just (Right rUrl) ->
+            do cloneP <- promptYesNo "A repository with this name already exists\
+                                     \in your github account. Clone it instead?"
+               when cloneP $ do run "git" ["clone", rUrl]
+                                liftIO exitSuccess
+  where
+    toSeconds Nothing = 5 * 10^(6::Int)
+    toSeconds (Just t) = t * 10^(6::Int)
+    getRepo uname = fmap repoSshUrl <$> userRepo (T.unpack uname) (T.unpack repo)
+
+handleGithub :: T.Text -> T.Text -> MakePackage ()
+handleGithub repo description = unlessConf "github.enable" (== False) $
+                                unlessConf "github.never-create" (== True) $
+                                unlessEmptyPrompt $ \repoName ->  do
+    auth <- confLookup "github.auth.oauth" >>= \case
+        Just oauth -> return $ GithubOAuth oauth
+        Nothing -> do uname <- confOrPrompt "github.username" "Github Username"
+                      pwd <- confOrPrompt "github.password" "Github Password"
+                      return $ GithubBasicAuth (T.encodeUtf8 uname)
+                                               (T.encodeUtf8 pwd)
+    let nRepo = NewRepo { newRepoName         = T.unpack repoName
+                        , newRepoDescription  = Just (T.unpack description)
+                        , newRepoHomepage     = Nothing
+                        , newRepoPrivate      = Nothing
+                        , newRepoHasIssues    = Nothing
+                        , newRepoHasWiki      = Nothing
+                        , newRepoAutoInit     = Nothing }
+    mbRepo <- liftIO $ createRepo auth nRepo
+    case mbRepo of
+        Left e -> do liftIO $ putStrLn $ "An Error occured while trying to create the repository:" ++ show e
+        Right r -> do run "git" ["remote", "add", "origin", repoSshUrl r]
+                      run "git" ["config", "branch.master.remote", "origin"]
+                      run "git" [ "config"
+                                , "branch.master.merge"
+                                , "refs/heads/master"]
+                      whenConf "git.do-commit" (== True) $
+                          run "git" ["push"]
+  where
+    unlessEmptyPrompt f =
+        do ln <- liftIO $ runInputT defaultSettings $ HL.getInputLineWithInitial
+                                                      "Repo Name (blank to skip)> "
+                                                      ("", T.unpack repo )
+           case ln of
+               Nothing -> return ()
+               Just line | null line -> return ()
+                         | otherwise -> f (T.pack line)
