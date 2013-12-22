@@ -31,26 +31,30 @@ main = do
   createDirectoryIfMissing False (T.unpack name)
   setCurrentDirectory (T.unpack name)
   createDirectoryIfMissing False ("src/")
-  cabalTemplate <- file "package.cabal" >>= T.readFile
-  file "dot-gitignore" >>= flip copyFile ".gitignore"
-  file "LICENSE" >>= flip copyFile "LICENSE"
-  file "Setup.hs" >>= flip copyFile "Setup.hs"
-  file "Main.hs" >>= flip copyFile "src/Main.hs"
-  -- The `template' library inserts random newlines if the variable is
-  -- at the end of a line.
-  S.writeFile
-    (T.unpack (name <> ".cabal"))
-    (E.encodeUtf8
-       (unmunge
-          (substitute cabalTemplate
-                      (context [("name",name)
-                               ,("desc",desc)
-                               ,("email",email)
-                               ,("author",author)
-                               ,("year",T.pack (show (getL year time)))
-                               ,("category",category)
-                               ,("exposed",exposed)]))))
+  let copyTemplate cabal infile outfile = do
+        template <- file infile >>= T.readFile
+        S.writeFile
+          outfile
+          (E.encodeUtf8
+             ((if cabal then unmunge else id)
+              (substitute template
+                          (context [("name",name)
+                                   ,("desc",desc)
+                                   ,("email",email)
+                                   ,("author",author)
+                                   ,("year",T.pack (show (getL year time)))
+                                   ,("category",category)
+                                   ,("exposed",exposed)]))))
+  copyTemplate True "package.cabal" (T.unpack (name <> ".cabal"))
+  copyTemplate False "dot-gitignore" ".gitignore"
+  copyTemplate False "Setup.hs" "Setup.hs"
+  copyTemplate False "LICENSE" "LICENSE"
+  copyTemplate False "README.md" "README.md"
+  copyTemplate False "Main.hs" "src/Main.hs"
+  copyTemplate False "Package.hs" (T.unpack ("src/" <> exposed <> ".hs"))
   get "cabal" ["configure"]
+  get "git" ["init"]
+  get "git" ["add","."]
   return ()
 
   where prompt p = do hSetBuffering stdout NoBuffering
@@ -58,6 +62,7 @@ main = do
                       T.getLine
         get prog args = fmap T.pack (readProcess prog args "")
         file fp = getDataFileName ("files/" <> fp)
+        -- The `template' library inserts random newlines.
         unmunge = L.replace "\nexecutable" "\n\nexecutable"
                 . L.replace "\nlibrary" "\n\nlibrary"
                 . L.replace "\n\n" "\n"

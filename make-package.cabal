@@ -14,6 +14,8 @@ data-files:          files/package.cabal
                      files/Setup.hs
                      files/dot-gitignore
                      files/Main.hs
+                     files/README.md
+                     files/Package.hs
 
 executable make-package
   hs-source-dirs:    src

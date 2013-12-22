@@ -1,4 +1,6 @@
--- | Main entry point.
+-- | Main entry point to ${name}.
+--
+-- ${desc}
 
 module Main where
 

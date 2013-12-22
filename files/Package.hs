@@ -1,0 +1,3 @@
+-- | $desc
+
+module $exposed where
