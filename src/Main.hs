@@ -12,6 +12,8 @@ import           Control.Monad
 import           Control.Monad.Trans (liftIO)
 import qualified Data.ByteString.Lazy as S
 import           Data.Char (isSpace)
+import qualified Data.Configurator as Conf
+import qualified Data.Configurator.Types as Conf
 import           Data.List (isPrefixOf, isSuffixOf)
 import           Data.Monoid
 import qualified Data.Text as T
@@ -33,23 +35,24 @@ import           System.Process
 -- | Main entry point.
 main :: IO ()
 main = do
-  name <- prompt "Name"
+  config <- loadConfig
+  packageName <- prompt "Package Name"
   desc <- prompt "Description"
-  licenseType <- promptLicense
+  licenseType <- getLicense config
   exposed <- prompt "Exposed Module(s)"
   category <- prompt "Category(s)"
-  email <- get "git" ["config","--get","user.email"]
-  author <- get "git" ["config","--get","user.name"]
+  author <- confOrGitorPrompt config "user.name" "author" "Author"
+  email <- confOrGitorPrompt config "user.email" "email" "Author Email"
   time <- getCurrentTime
-  createDirectoryIfMissing False (T.unpack name)
-  setCurrentDirectory (T.unpack name)
+  createDirectoryIfMissing False (T.unpack packageName)
+  setCurrentDirectory (T.unpack packageName)
   createDirectoryIfMissing False ("src/")
   let copyTemplate infile outfile =
         do template <- file infile >>= T.readFile
            T.writeFile
              outfile
              (substitute template
-                         [("name",name)
+                         [("name",packageName)
                          ,("desc",desc)
                          ,("email",email)
                          ,("author",author)
@@ -57,30 +60,56 @@ main = do
                          ,("category",category)
                          ,("exposed",exposed)
                          ,("license",licenseType)])
-  copyTemplate "package.cabal" (T.unpack (name <> ".cabal"))
+  copyTemplate "package.cabal" (T.unpack (packageName <> ".cabal"))
   copyTemplate "dot-gitignore" ".gitignore"
   copyTemplate "Setup.hs" "Setup.hs"
-  copyTemplate ("licenses"</> T.unpack licenseType<.>"license") "LICENSE"
+  copyTemplate ("licenses"</> T.unpack licenseType <.> "license") "LICENSE"
   copyTemplate "README.md" "README.md"
   copyTemplate "Main.hs" "src/Main.hs"
   copyTemplate "Package.hs" (T.unpack ("src/" <> exposed <> ".hs"))
   run "cabal" ["configure"]
-  run "git" ["init"]
-  run "git" ["add","."]
-
+  unlessConf config "use-git" (== False) $ do
+    run "git" ["init"]
+    run "git" ["add","."]
+    whenConf config "git-do-commit" (== True) $ do
+      run "git" ["commit", "-m","initial commit"]
   where
+    confOrPrompt :: Conf.Config -> T.Text -> IO T.Text
+    confOrPrompt conf p = Conf.lookup conf p >>= \case
+        Nothing -> prompt p
+        Just x  -> return x
+    confOrGitorPrompt conf gitQ c p = Conf.lookup conf c >>= \case
+        Just x -> return x
+        Nothing -> Conf.lookup conf "use-git" >>= \case
+                   Just True -> queryGit gitQ >>= \case
+                       Just x -> return x
+                       Nothing -> prompt p
+                   _ -> prompt p
     prompt p = runInputT defaultSettings $ do
-        ln <- HL.getInputLine (p <> "> ")
+        ln <- HL.getInputLine (T.unpack $ p <> "> ")
         case ln of
             Nothing -> liftIO $ exitFailure
             Just line -> return $ T.pack line
-    promptLicense = do
+    getLicense conf = do
         licensesDir <- file "licenses"
-        files <- map takeBaseName . filter (".license" `isSuffixOf` ) <$>
+        licenses <- map takeBaseName . filter (".license" `isSuffixOf` ) <$>
                         getDirectoryContents licensesDir
-        T.pack <$> choose "license" files
+        defaultLicense <- Conf.lookup conf "default-license" >>= \case
+            Nothing -> return Nothing
+            Just l -> if (l `elem` licenses)
+                      then return . Just $ T.pack l
+                      else do putStrLn $ "Warning, configured default license \""
+                                       ++ l ++ "\" is unknown"
+                              return Nothing
+        case defaultLicense of
+            Just l -> return l
+            Nothing -> T.pack <$> choose "license" licenses
     get prog args = fmap (T.concat . take 1 . T.lines . T.pack)
                          (readProcess prog args "")
+    queryGit q = readProcessWithExitCode "git" ["config","--get", q] "" >>= \case
+        (ExitSuccess, res, _stderr) -> return . Just $ T.pack res
+        _ -> return Nothing
+
     run pg args = rawSystem pg args >>= \case
         ExitSuccess -> return ()
         ExitFailure n -> do
@@ -89,7 +118,18 @@ main = do
                         exitFailure
     file fp = getDataFileName ("files/" <> fp)
     substitute = foldl (\str (this,that) -> T.replace ("$" <> this) that str)
-
+    loadConfig = do
+        appData <- getAppUserDataDirectory "make-package"
+        home <- getHomeDirectory
+        Conf.load [ Conf.Optional $ appData </> "config"
+                  , Conf.Optional $ home </> ".make-package"
+                  ]
+    unlessConf conf option p f = Conf.lookup conf option >>= \case
+        Just x | p x -> return ()
+        _ -> f
+    whenConf conf option p f = Conf.lookup conf option >>= \case
+        Just x | p x -> f
+        _ -> return ()
 
 -- | Let the user choose a string from a list
 choose :: String -> [String] -> IO String
