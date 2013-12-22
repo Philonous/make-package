@@ -1,6 +1,6 @@
--- | Main entry point to ${name}.
+-- | Main entry point to $name.
 --
--- ${desc}
+-- $desc
 
 module Main where
 
