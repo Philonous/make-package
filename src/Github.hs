@@ -16,6 +16,8 @@ import           System.Timeout
 
 import           IO
 
+-- | Check whether a repository with the given name exists on the users github
+-- accoutn and suggest cloning it
 maybeClone :: T.Text -> MakePackage ()
 maybeClone repo = unlessConf "github.enable" (== False) $
                   unlessConf "github.never-clone" (== True) $ do
@@ -36,33 +38,38 @@ maybeClone repo = unlessConf "github.enable" (== False) $
     toSeconds (Just t) = t * 10^(6::Int)
     getRepo uname = fmap repoSshUrl <$> userRepo (T.unpack uname) (T.unpack repo)
 
+-- | Create a github repository in the users account and set it as origin if
+-- permitted by configuration
 handleGithub :: T.Text -> T.Text -> MakePackage ()
 handleGithub repo description = unlessConf "github.enable" (== False) $
                                 unlessConf "github.never-create" (== True) $
-                                unlessEmptyPrompt $ \repoName ->  do
+                                unlessEmptyPrompt $ \rName ->  do
     auth <- confLookup "github.auth.oauth" >>= \case
         Just oauth -> return $ GithubOAuth oauth
         Nothing -> do uname <- confOrPrompt "github.username" "Github Username"
                       pwd <- confOrPrompt "github.password" "Github Password"
                       return $ GithubBasicAuth (T.encodeUtf8 uname)
                                                (T.encodeUtf8 pwd)
-    let nRepo = NewRepo { newRepoName         = T.unpack repoName
+    let nRepo = NewRepo { newRepoName         = T.unpack rName
                         , newRepoDescription  = Just (T.unpack description)
                         , newRepoHomepage     = Nothing
                         , newRepoPrivate      = Nothing
                         , newRepoHasIssues    = Nothing
                         , newRepoHasWiki      = Nothing
                         , newRepoAutoInit     = Nothing }
+    liftIO $ putStrLn "Creating github repository"
     mbRepo <- liftIO $ createRepo auth nRepo
     case mbRepo of
         Left e -> do liftIO $ putStrLn $ "An Error occured while trying to create the repository:" ++ show e
-        Right r -> do run "git" ["remote", "add", "origin", repoSshUrl r]
+        Right r -> do liftIO $ putStrLn "Done."
+                      liftIO $ putStrLn "Configuring git to track the new repository"
+                      run "git" ["remote", "add", "origin", repoSshUrl r]
                       run "git" ["config", "branch.master.remote", "origin"]
                       run "git" [ "config"
                                 , "branch.master.merge"
                                 , "refs/heads/master"]
-                      whenConf "git.do-commit" (== True) $
-                          run "git" ["push"]
+                      liftIO $ putStrLn "Done."
+                      whenConf "git.do-commit" (== True) $ run "git" ["push"]
   where
     unlessEmptyPrompt f =
         do ln <- liftIO $ runInputT defaultSettings $ HL.getInputLineWithInitial
