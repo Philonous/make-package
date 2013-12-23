@@ -96,7 +96,7 @@ getLicense = do
     licensesDir <- liftIO $ dataFile "licenses"
     licenses <- map takeBaseName . filter (".license" `isSuffixOf` ) <$>
                     liftIO (getDirectoryContents licensesDir)
-    defaultLicense <- confLookup "default-license" >>= \case
+    defaultLicense <- confLookup "defaults.license" >>= \case
         Nothing -> return Nothing
         Just l -> if (l `elem` licenses)
                   then return . Just $ T.pack l
