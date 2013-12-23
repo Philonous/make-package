@@ -7,6 +7,7 @@ module Main where
 import           IO
 import           Github
 
+import           Control.Monad (when)
 import           Control.Monad.Trans (liftIO)
 import           Data.Monoid
 import qualified Data.Text as T
@@ -14,8 +15,8 @@ import qualified Data.Text.IO as T
 import           Data.Time
 import           Data.Time.Lens
 import           System.Directory
+import           System.Exit (exitFailure)
 import           System.FilePath
-
 
 -- import System.Process
 
@@ -23,6 +24,7 @@ import           System.FilePath
 main :: IO ()
 main = withConfig $ do
   packageName <- prompt "Package Name"
+  checkExists packageName
   maybeClone packageName
   author <- confOrGitOrPrompt "defaults.author" "user.name"  "Author"
   email <- confOrGitOrPrompt "defaults.email" "user.email" "Author Email"
@@ -58,6 +60,13 @@ main = withConfig $ do
       run "git" ["commit", "-m","initial commit"]
   handleGithub packageName desc
   where
+    checkExists pname = liftIO $
+        do fileExists <- doesFileExist (T.unpack pname)
+           dirExists <- doesDirectoryExist (T.unpack pname)
+           when (fileExists || dirExists) $
+               do putStrLn "A file or directory with this name already exists. Bailing out"
+                  exitFailure
+
     doCopyTemplate substitutions infile outfile = liftIO $
         do template <- dataFile infile >>= T.readFile
            T.writeFile outfile (substitute template substitutions)
