@@ -57,7 +57,8 @@ main = withConfig $ do
     run "git" ["init"]
     run "git" ["add", "."]
     whenConf "git.do-commit" (== True) $ do
-      run "git" ["commit", "-m","initial commit"]
+      msg <- confLookupDefault "git.initial-commit-message" "initial commit"
+      run "git" ["commit", "-m", msg]
   handleGithub packageName desc
   where
     checkExists pname = liftIO $

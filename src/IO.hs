@@ -44,7 +44,8 @@ confLookup c =
          Nothing -> liftIO . (`Conf.lookup` c) =<< MP ask
          Just x -> return $ Just x
 
-
+confLookupDefault :: Conf.Configured a => Conf.Name -> a -> MakePackage a
+confLookupDefault c d = maybe d id <$> confLookup c
 
 -- | Prompt user
 prompt :: T.Text -> MakePackage T.Text
@@ -134,8 +135,8 @@ loadConfig :: IO Conf.Config
 loadConfig = do
     appData <- getAppUserDataDirectory "make-package"
     home <- getHomeDirectory
-    Conf.load [ Conf.Optional $ appData </> "config"
-              , Conf.Optional $ home </> ".make-package"
+    Conf.load [ Conf.Optional $ appData </> "make-package.conf"
+              , Conf.Optional $ home </> ".make-package.conf"
               ]
 
 -- | Run action unless configuration option is set and predicate is true

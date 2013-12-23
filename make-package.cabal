@@ -10,14 +10,13 @@ category:            Development
 build-type:          Simple
 cabal-version:       >=1.8
 data-files:          files/package.cabal
-                     files/licenses/Apache-2.0.license
-                     files/licenses/BSD3.license
-                     files/licenses/MIT.license
+                     files/licenses/*.license
                      files/Setup.hs
                      files/dot-gitignore
                      files/Main.hs
                      files/README.md
                      files/Package.hs
+extra-source-files:  make-package.config
 
 executable make-package
   hs-source-dirs:    src
