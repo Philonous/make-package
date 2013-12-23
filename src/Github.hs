@@ -69,7 +69,9 @@ handleGithub repo description = unlessConf "github.enable" (== False) $
                                 , "branch.master.merge"
                                 , "refs/heads/master"]
                       liftIO $ putStrLn "Done."
-                      whenConf "git.do-commit" (== True) $ run "git" ["push"]
+                      whenConf "git.do-commit" (== True) $ run "git" [ "push"
+                                                                     , "origin"
+                                                                     , "master"]
   where
     unlessEmptyPrompt f =
         do ln <- liftIO $ runInputT defaultSettings $ HL.getInputLineWithInitial
