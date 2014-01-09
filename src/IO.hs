@@ -15,6 +15,7 @@ import qualified Data.Configurator.Types as Conf
 import           Data.List (isPrefixOf, isSuffixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Maybe (fromMaybe)
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -37,28 +38,46 @@ withConfig :: MakePackage a -> IO a
 withConfig (MP f) = do conf <- loadConfig
                        fst <$> (runReaderT (runStateT f (Map.empty)) conf)
 
-confLookup :: Conf.Configured a => Conf.Name -> MakePackage (Maybe a)
-confLookup c =
+
+stored :: Conf.Configured a =>
+          Text
+       -> MakePackage (Maybe a)
+stored c =
   do cache <- MP get
-     case Conf.convert . Conf.String =<< Map.lookup c cache of
-         Nothing -> liftIO . (`Conf.lookup` c) =<< MP ask
-         Just x -> return $ Just x
+     return $ Conf.convert . Conf.String =<< Map.lookup c cache
+
+optionDefault :: Conf.Configured b => Text -> b -> MakePackage b
+optionDefault o d = fromMaybe d `fmap` stored o
+
+confLookup :: Conf.Configured a => Conf.Name -> MakePackage (Maybe a)
+confLookup c = stored c >>= \case
+    Just x -> return $ Just x
+    Nothing -> liftIO . (`Conf.lookup` c) =<< MP ask
 
 confLookupDefault :: Conf.Configured a => Conf.Name -> a -> MakePackage a
 confLookupDefault c d = maybe d id <$> confLookup c
 
 -- | Prompt user
-prompt :: T.Text -> MakePackage T.Text
-prompt p = liftIO $ runInputT defaultSettings $ do
-    ln <- HL.getInputLine (T.unpack $ p <> "> ")
-    case ln of
-        Nothing -> liftIO exitFailure
-        Just line -> return $ T.pack line
+prompt :: T.Text -> T.Text -> Text -> MakePackage T.Text
+prompt c p il = stored c >>= \case
+    Just x -> return x
+    Nothing ->
+      do ln <- liftIO $ runInputT defaultSettings $
+                   HL.getInputLineWithInitial (T.unpack $ p <> "> ")
+                                              (T.unpack il, "")
+         case ln of
+             Nothing -> liftIO exitFailure
+             Just line ->
+                 do setOption c (T.pack line)
+                    return (T.pack line)
 
-
-promptYesNo :: T.Text -> MakePackage Bool
-promptYesNo p = liftIO $ do T.putStrLn p
-                            runInputT defaultSettings go
+promptYesNo :: T.Text -> T.Text -> MakePackage Bool
+promptYesNo c p = stored c >>= \case
+    Just x -> return x
+    Nothing -> do liftIO $ T.putStrLn p
+                  res <- liftIO $ runInputT defaultSettings go
+                  setOption c (if res then "true" else "false")
+                  return res
   where
     go = do char <- getInputChar ("[y]yes or [n]o> ")
             case char of
@@ -69,26 +88,30 @@ promptYesNo p = liftIO $ do T.putStrLn p
                 Just 'N' -> return False
                 _   -> go
 
+
+setOption :: Text -> Text -> MakePackage ()
+setOption c x = MP $ modify (Map.insert c x)
+
 -- | Get option from configuration file or prompt user
-confOrPrompt :: T.Text -> T.Text -> MakePackage T.Text
-confOrPrompt c p = confLookup c >>= \case
-    Nothing -> do x <- prompt p
-                  MP $ modify (Map.insert c x)
-                  return x
+confOrPrompt :: T.Text -> T.Text -> T.Text -> MakePackage T.Text
+confOrPrompt c p i = confLookup c >>= \case
+    Nothing -> prompt c p i
     Just x  -> return x
 
 -- | Get option from configuration file, git configuration or promp user
-confOrGitOrPrompt :: T.Text -> T.Text -> T.Text -> MakePackage T.Text
-confOrGitOrPrompt c gitQ p = confLookup c >>= \case
+confOrGitOrPrompt :: T.Text -> T.Text -> T.Text -> T.Text -> MakePackage T.Text
+confOrGitOrPrompt c gitQ p i = confLookup c >>= \case
     Just x -> return x
     Nothing -> confLookup "git.enable" >>= \case
                Just True -> queryGit (T.unpack gitQ) >>= \case
-                   Just x -> do MP $ modify (Map.insert c x)
+                   Just x -> do setOption c x
                                 return x
-                   Nothing -> do x <- prompt p
-                                 MP $ modify (Map.insert c x)
+                   Nothing -> do x <- prompt c p i
+                                 setOption c x
                                  return x
-               _ -> prompt p
+               _ -> do x <- prompt c p i
+                       setOption c x
+                       return x
 
 -- | Get license from configuration or prompt
 getLicense :: MakePackage T.Text

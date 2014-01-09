@@ -10,7 +10,6 @@ import           Control.Monad.Trans
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import           Github.Repos
-import           System.Console.Haskeline as HL
 import           System.Exit (exitSuccess)
 import           System.Timeout
 
@@ -18,10 +17,10 @@ import           IO
 
 -- | Check whether a repository with the given name exists on the users github
 -- accoutn and suggest cloning it
-maybeClone :: T.Text -> MakePackage ()
-maybeClone repo = unlessConf "github.enable" (== False) $
-                  unlessConf "github.never-clone" (== True) $ do
-    uname <- confOrPrompt "github.username" "Github Username"
+maybeClone :: T.Text -> T.Text -> MakePackage ()
+maybeClone repo dir = unlessConf "github.enable" (== False) $
+                      unlessConf "github.never-clone" (== True) $ do
+    uname <- confOrPrompt "github.username" "Github Username" ""
     liftIO $ putStrLn "Checking github for preexisting repos"
     timeoutDelay <- toSeconds <$> confLookup "github.timeout"
     mbRepoUrl <- liftIO . timeout timeoutDelay $ getRepo uname
@@ -29,9 +28,10 @@ maybeClone repo = unlessConf "github.enable" (== False) $
         Nothing -> return ()
         Just (Left _) -> return ()
         Just (Right rUrl) ->
-            do cloneP <- promptYesNo "A repository with this name already exists\
+            do cloneP <- promptYesNo "clone"
+                                     "A repository with this name already exists\
                                      \in your github account. Clone it instead?"
-               when cloneP $ do run "git" ["clone", rUrl]
+               when cloneP $ do run "git" ["clone", rUrl, T.unpack dir]
                                 liftIO exitSuccess
   where
     toSeconds Nothing = 5 * 10^(6::Int)
@@ -43,11 +43,13 @@ maybeClone repo = unlessConf "github.enable" (== False) $
 handleGithub :: T.Text -> T.Text -> MakePackage ()
 handleGithub repo description = unlessConf "github.enable" (== False) $
                                 unlessConf "github.never-create" (== True) $
-                                unlessEmptyPrompt $ \rName ->  do
+                                unlessEmptyPrompt "repository" $ \rName ->  do
     auth <- confLookup "github.auth.oauth" >>= \case
         Just oauth -> return $ GithubOAuth oauth
-        Nothing -> do uname <- confOrPrompt "github.username" "Github Username"
-                      pwd <- confOrPrompt "github.password" "Github Password"
+        Nothing -> do uname <- confOrPrompt "github.username" "Github Username" ""
+                      pwd <- confOrPrompt "github.auth.password"
+                                          "Github Password"
+                                          ""
                       return $ GithubBasicAuth (T.encodeUtf8 uname)
                                                (T.encodeUtf8 pwd)
     let nRepo = NewRepo { newRepoName         = T.unpack rName
@@ -73,11 +75,8 @@ handleGithub repo description = unlessConf "github.enable" (== False) $
                                                                      , "origin"
                                                                      , "master"]
   where
-    unlessEmptyPrompt f =
-        do ln <- liftIO $ runInputT defaultSettings $ HL.getInputLineWithInitial
-                                                      "Repo Name (blank to skip)> "
-                                                      ("", T.unpack repo )
-           case ln of
-               Nothing -> return ()
-               Just line | null line -> return ()
-                         | otherwise -> f (T.pack line)
+    unlessEmptyPrompt c f =
+        do line <- prompt c "Repo Name (blank to skip)> " repo
+           if T.null line
+           then return ()
+           else f line

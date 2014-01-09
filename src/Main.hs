@@ -6,6 +6,7 @@ module Main where
 
 import           IO
 import           Github
+import           Options
 
 import           Control.Monad (when)
 import           Control.Monad.Trans (liftIO)
@@ -23,15 +24,17 @@ import           System.FilePath
 -- | Main entry point.
 main :: IO ()
 main = withConfig $ do
-  packageName <- prompt "Package Name"
-  checkExists packageName
-  maybeClone packageName
-  author <- confOrGitOrPrompt "defaults.author" "user.name"  "Author"
-  email <- confOrGitOrPrompt "defaults.email" "user.email" "Author Email"
-  desc <- prompt "Description"
+  handleArgs
+  packageName <- prompt "package" "Package Name" ""
+  packageDir <- optionDefault "directory" packageName
+  checkExists packageDir
+  maybeClone packageName packageDir
+  author <- confOrGitOrPrompt "defaults.author" "user.name"  "Author" ""
+  email <- confOrGitOrPrompt "defaults.email" "user.email" "Author Email" ""
+  desc <- prompt "description" "Description" ""
   licenseType <- getLicense
-  exposed <- prompt "Exposed Module(s)"
-  category <- prompt "Category(s)"
+  exposed <- prompt "modules" "Exposed Module(s)" "Main"
+  category <- prompt "categories" "Category(s)" ""
   now <- liftIO getCurrentTime
   liftIO $ do createDirectoryIfMissing False (T.unpack packageName)
               setCurrentDirectory (T.unpack packageName)
