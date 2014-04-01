@@ -1,5 +1,5 @@
 name:                make-package
-version:             1.0.0
+version:             1.0.0.1
 synopsis:            Make a cabalized package
 description:         Create a cabalized haskell project
 license:             BSD3
