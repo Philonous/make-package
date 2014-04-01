@@ -8,11 +8,13 @@ import           IO
 import           Github
 import           Options
 
+import           Control.Lens ((^.), to)
 import           Control.Monad (when)
 import           Control.Monad.Trans (liftIO)
 import           Data.Monoid
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import           Data.Text.Lens
 import           Data.Time
 import           Data.Time.Lens
 import           System.Directory
@@ -43,7 +45,7 @@ main = withConfig $ do
                       ,("desc"     ,desc)
                       ,("email"    ,email)
                       ,("author"   ,author)
-                      ,("year"     ,T.pack (show (getL year now)))
+                      ,("year"     ,now ^. years . to show . packed)
                       ,("category" ,category)
                       ,("exposed"  ,exposed)
                       ,("license"  ,licenseType)]
