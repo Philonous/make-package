@@ -6,7 +6,7 @@
 
 module IO where
 
-import           Control.Applicative ((<$>))
+import           Control.Applicative
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Char (isSpace)
@@ -21,7 +21,7 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           System.Console.Haskeline as HL
-import           System.Console.Haskeline.MonadException()
+import           System.Console.Haskeline.MonadException ()
 import           System.Directory
 import           System.Exit
 import           System.FilePath
@@ -32,7 +32,7 @@ import           Paths_make_package
 newtype MakePackage a = MP {unConf :: StateT (Map Text Text)
                                       (ReaderT Conf.Config IO)
                                       a}
-                        deriving (Monad, MonadIO, Functor)
+                        deriving (Monad, MonadIO, Functor, Applicative)
 
 withConfig :: MakePackage a -> IO a
 withConfig (MP f) = do conf <- loadConfig
