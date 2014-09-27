@@ -9,6 +9,8 @@ import           Control.Monad
 import           Control.Monad.Trans
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Foldable as Foldable
+import           Github.Auth
 import           Github.Repos
 import           System.Exit (exitSuccess)
 import           System.Timeout
@@ -25,14 +27,13 @@ maybeClone repo dir = unlessConf "github.enable" (== False) $
     timeoutDelay <- toSeconds <$> confLookup "github.timeout"
     mbRepoUrl <- liftIO . timeout timeoutDelay $ getRepo uname
     case mbRepoUrl of
-        Nothing -> return ()
-        Just (Left _) -> return ()
-        Just (Right rUrl) ->
+        Just (Right (Just rUrl)) ->
             do cloneP <- promptYesNo "clone"
                                      "A repository with this name already exists\
                                      \in your github account. Clone it instead?"
                when cloneP $ do run "git" ["clone", rUrl, T.unpack dir]
                                 liftIO exitSuccess
+        _ -> return ()
   where
     toSeconds Nothing = 5 * 10^(6::Int)
     toSeconds (Just t) = t * 10^(6::Int)
@@ -65,7 +66,8 @@ handleGithub repo description = unlessConf "github.enable" (== False) $
         Left e -> do liftIO $ putStrLn $ "An Error occured while trying to create the repository:" ++ show e
         Right r -> do liftIO $ putStrLn "Done."
                       liftIO $ putStrLn "Configuring git to track the new repository"
-                      run "git" ["remote", "add", "origin", repoSshUrl r]
+                      Foldable.forM_ (repoSshUrl r) $ \url ->
+                          run "git" ["remote", "add", "origin", url]
                       run "git" ["config", "branch.master.remote", "origin"]
                       run "git" [ "config"
                                 , "branch.master.merge"

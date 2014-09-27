@@ -34,7 +34,7 @@ executable make-package
                      containers >= 0.5,
                      directory >= 1.2,
                      filepath >= 1.3,
-                     github >= 0.7,
+                     github >= 0.11,
                      haskeline >= 0.7,
                      mtl >= 2.1,
                      process >= 1.1,
