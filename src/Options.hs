@@ -45,6 +45,7 @@ options = [ Option "h" ["help"] (NoArg $ help [])
           , Option "M" ["commit-message"] (setOpt "git.initial-commit-message"
                                                   "string")
             "commit message to use"
+          , Option "t" ["template"] (setOpt "template.name" "string") "template"
           , Option "G" ["github"] (NoArg $ setOption "github.enable" "true")
             "enable github integration"
           , Option "g" ["no-github"] (NoArg $ setOption "github.enable" "false")
