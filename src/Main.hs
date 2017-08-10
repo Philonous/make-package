@@ -31,8 +31,8 @@ main = withConfig $ do
   packageName <- prompt "package" "Package Name" ""
   packageDir <- optionDefault "directory" packageName
   checkExists packageDir
-  author <- confOrGitOrPrompt "defaults.author" "user.name"  "Author" ""
-  email <- confOrGitOrPrompt "defaults.email" "user.email" "Author Email" ""
+  author <- confOrGitOrPromptString "defaults.author" "user.name"  "Author" ""
+  email <- confOrGitOrPromptString "defaults.email" "user.email" "Author Email" ""
   desc <- prompt "description" "Description" ""
   licenseType <- getLicense
   category <- stored "categories"

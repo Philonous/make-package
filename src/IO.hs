@@ -31,7 +31,7 @@ import           System.Process
 import           Paths_make_package
 
 newtype MakePackage a = MP
-  { unConf :: StateT (Map Text Text) (ReaderT Conf.Config IO) a
+  { unConf :: StateT (Map Text Conf.Value) (ReaderT Conf.Config IO) a
   } deriving (Monad, MonadIO, Functor, Applicative
              , Ex.MonadThrow, Ex.MonadCatch)
 
@@ -52,9 +52,7 @@ withConfig (MP f) = do conf <- loadConfig
 stored :: Conf.Configured a =>
           Text
        -> MakePackage (Maybe a)
-stored c =
-  do cache <- MP get
-     return $ Conf.convert . Conf.String =<< Map.lookup c cache
+stored c = (Conf.convert <=< Map.lookup c) <$> MP get
 
 optionDefault :: Conf.Configured b => Text -> b -> MakePackage b
 optionDefault o d = fromMaybe d <$> stored o
@@ -78,7 +76,7 @@ prompt c p il = stored c >>= \case
          case ln of
              Nothing -> liftIO exitFailure
              Just line ->
-                 do setOption c (Text.pack line)
+                 do setOption c (Conf.String $ Text.pack line)
                     return (Text.pack line)
 
 promptYesNo :: Text.Text -> Text.Text -> MakePackage Bool
@@ -86,7 +84,7 @@ promptYesNo c p = stored c >>= \case
     Just x -> return x
     Nothing -> do liftIO $ Text.putStrLn p
                   res <- liftIO $ runInputT defaultSettings go
-                  setOption c (if res then "true" else "false")
+                  setOption c $ Conf.Bool res
                   return res
   where
     go = do char <- getInputChar "[y]yes or [n]o> "
@@ -99,7 +97,7 @@ promptYesNo c p = stored c >>= \case
                 _   -> go
 
 
-setOption :: Text -> Text -> MakePackage ()
+setOption :: Text -> Conf.Value -> MakePackage ()
 setOption c x = MP $ modify (Map.insert c x)
 
 -- | Get option from configuration file or prompt user
@@ -109,19 +107,20 @@ confOrPrompt c p i = confLookup c >>= \case
     Just x  -> return x
 
 -- | Get option from configuration file, git configuration or promp user
-confOrGitOrPrompt :: Text.Text -> Text.Text -> Text.Text -> Text.Text -> MakePackage Text.Text
-confOrGitOrPrompt c gitQ p i = confLookup c >>= \case
+confOrGitOrPromptString ::
+     Text.Text -> Text.Text -> Text.Text -> Text.Text -> MakePackage Text.Text
+confOrGitOrPromptString c gitQ p i = confLookup c >>= \case
     Just x -> return x
     Nothing -> confLookup "git.enable" >>= \case
-               Just True -> queryGit (Text.unpack gitQ) >>= \case
-                   Just x -> do setOption c x
+               Just (Conf.Bool True) -> queryGit (Text.unpack gitQ) >>= \case
+                   Just x -> do setOption c (Conf.String x)
                                 return x
                    Nothing -> promptAndSet
                _ -> promptAndSet
   where
     promptAndSet = do
       x <- prompt c p i
-      setOption c x
+      setOption c (Conf.String x)
       return x
 
 firstDirectoryThatExists :: MonadIO m => [FilePath] -> m FilePath

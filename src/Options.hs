@@ -5,15 +5,21 @@ module Options where
 
 import           Control.Monad
 import           Control.Monad.Trans
+import qualified Data.Configurator.Types                 as Conf
 import qualified Data.Text as T
 import           System.Console.GetOpt
 import           System.Environment
 import           System.Exit (exitSuccess, exitFailure)
 
+
 import           IO
 
 setOpt :: T.Text -> String -> ArgDescr (MakePackage ())
-setOpt o = ReqArg (setOption o . T.pack)
+setOpt o = ReqArg (setOption o . Conf.String .  T.pack)
+
+cTrue, cFalse :: Conf.Value
+cTrue = Conf.Bool True
+cFalse = Conf.Bool False
 
 options :: [OptDescr (MakePackage ())]
 options = [ Option "h" ["help"] (NoArg $ help [])
@@ -34,21 +40,21 @@ options = [ Option "h" ["help"] (NoArg $ help [])
             "exposed modules"
           , Option "w" ["categories"] (setOpt "categories" "string")
             "hackage categories"
-          , Option "G" ["git"] (NoArg $ setOption "git.enable" "true")
+          , Option "G" ["git"] (NoArg $ setOption "git.enable" cTrue)
             "enable git"
-          , Option "g" ["no-git"] (NoArg $ setOption "git.enable" "false")
+          , Option "g" ["no-git"] (NoArg $ setOption "git.enable" cFalse)
             "disable git"
-          , Option "C" ["commit"] (NoArg $ setOption "git.do-commit" "true")
+          , Option "C" ["commit"] (NoArg $ setOption "git.do-commit" cTrue)
             "run git commit"
-          , Option "c" ["no-commit"] (NoArg $ setOption "git.do-commit" "false")
+          , Option "c" ["no-commit"] (NoArg $ setOption "git.do-commit" cFalse)
             "don't run git commit"
           , Option "M" ["commit-message"] (setOpt "git.initial-commit-message"
                                                   "string")
             "commit message to use"
           , Option "t" ["template"] (setOpt "template.name" "string") "template"
-          , Option "H" ["github"] (NoArg $ setOption "github.enable" "true")
+          , Option "H" ["github"] (NoArg $ setOption "github.enable" cTrue)
             "enable github integration"
-          , Option "h" ["no-github"] (NoArg $ setOption "github.enable" "false")
+          , Option "h" ["no-github"] (NoArg $ setOption "github.enable" cFalse)
             "disable github integration"
           , Option "U" ["username"] (setOpt "github.username" "string")
             "github username"
@@ -56,9 +62,9 @@ options = [ Option "h" ["help"] (NoArg $ help [])
             "github repository to create"
           , Option "T" ["timeout"] (setOpt "github.timeout" "int")
             "timeout for github interactions in seconds"
-          , Option "K" ["clone"] (NoArg $ setOption "clone" "true")
+          , Option "K" ["clone"] (NoArg $ setOption "clone" cTrue)
             "clone existing repository "
-          , Option "k" ["no-clone"] (NoArg $ setOption "clone" "false")
+          , Option "k" ["no-clone"] (NoArg $ setOption "clone" cFalse)
             "don't clone existing repository "
           , Option "O" ["oauth"] (setOpt "github.auth.oauth" "string")
             "github oauth token"
@@ -76,8 +82,8 @@ help errors = liftIO $
 
 handleArgs :: MakePackage ()
 handleArgs =
-  do args <- liftIO $ getArgs
-     let (opts, _, errs) = getOpt (ReturnInOrder (setOption "package" . T.pack))
+  do args <- liftIO getArgs
+     let (opts, _, errs) = getOpt (ReturnInOrder (setOption "package" . Conf.String . T.pack))
                                   options
                                   args
      unless (null errs) $ help errs
