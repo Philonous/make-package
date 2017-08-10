@@ -32,7 +32,7 @@ options = [ Option "h" ["help"] (NoArg $ help [])
             "license name"
           , Option "M" ["modules"] (setOpt "modules" "string")
             "exposed modules"
-          , Option "H" ["categories"] (setOpt "categories" "string")
+          , Option "w" ["categories"] (setOpt "categories" "string")
             "hackage categories"
           , Option "G" ["git"] (NoArg $ setOption "git.enable" "true")
             "enable git"
@@ -46,9 +46,9 @@ options = [ Option "h" ["help"] (NoArg $ help [])
                                                   "string")
             "commit message to use"
           , Option "t" ["template"] (setOpt "template.name" "string") "template"
-          , Option "G" ["github"] (NoArg $ setOption "github.enable" "true")
+          , Option "H" ["github"] (NoArg $ setOption "github.enable" "true")
             "enable github integration"
-          , Option "g" ["no-github"] (NoArg $ setOption "github.enable" "false")
+          , Option "h" ["no-github"] (NoArg $ setOption "github.enable" "false")
             "disable github integration"
           , Option "U" ["username"] (setOpt "github.username" "string")
             "github username"

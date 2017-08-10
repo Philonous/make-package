@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 -- | Main entry point.
 
 module Main where
 
+import           Data.Maybe          (catMaybes)
 import           Data.Text           (Text)
-import qualified Data.Text           as Text
 import           Github
 import           IO
 import           Options
@@ -20,8 +21,6 @@ import           Data.Text.Lens
 import           Data.Time
 import           Data.Time.Lens
 import           System.Directory
-import           System.Exit         (exitFailure)
-import           System.FilePath
 
 -- import System.Process
 
@@ -36,7 +35,7 @@ main = withConfig $ do
   email <- confOrGitOrPrompt "defaults.email" "user.email" "Author Email" ""
   desc <- prompt "description" "Description" ""
   licenseType <- getLicense
-  category <- prompt "categories" "Category(s)" ""
+  category <- stored "categories"
   now <- liftIO getCurrentTime
   let substitutions :: [(Text, Text)]
       substitutions = [("name"     ,packageName)
@@ -44,8 +43,9 @@ main = withConfig $ do
                       ,("email"    ,email)
                       ,("author"   ,author)
                       ,("year"     ,now ^. years . to show . packed)
-                      ,("category" ,category)
-                      ,("license"  ,licenseType)]
+                      ,("license"  ,licenseType)
+                      ]
+                      ++ catMaybes [("category",) <$> category]
       templateConf = templates packageName substitutions
   maybeClone packageName packageDir
   liftIO $ do createDirectoryIfMissing False (T.unpack packageName)
@@ -64,5 +64,5 @@ main = withConfig $ do
     checkExists pname = liftIO $ do
       fileExists <- doesFileExist (T.unpack pname)
       dirExists <- doesDirectoryExist (T.unpack pname)
-      when (fileExists || dirExists) $ do
+      when (fileExists || dirExists) $
         err $ "File or directory \"" <> pname <>"\" already exists."
