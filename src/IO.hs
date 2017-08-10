@@ -46,7 +46,7 @@ err msg = liftIO $ do
 
 withConfig :: MakePackage a -> IO a
 withConfig (MP f) = do conf <- loadConfig
-                       fst <$> (runReaderT (runStateT f (Map.empty)) conf)
+                       fst <$> runReaderT (runStateT f Map.empty) conf
 
 
 stored :: Conf.Configured a =>
@@ -65,7 +65,7 @@ confLookup c = stored c >>= \case
     Nothing -> liftIO . (`Conf.lookup` c) =<< MP ask
 
 confLookupDefault :: Conf.Configured a => Conf.Name -> a -> MakePackage a
-confLookupDefault c d = maybe d id <$> confLookup c
+confLookupDefault c d = fromMaybe d <$> confLookup c
 
 -- | Prompt user
 prompt :: Text.Text -> Text.Text -> Text -> MakePackage Text.Text
@@ -89,7 +89,7 @@ promptYesNo c p = stored c >>= \case
                   setOption c (if res then "true" else "false")
                   return res
   where
-    go = do char <- getInputChar ("[y]yes or [n]o> ")
+    go = do char <- getInputChar "[y]yes or [n]o> "
             case char of
                 Nothing -> liftIO exitFailure
                 Just 'y' -> return True
@@ -116,22 +116,43 @@ confOrGitOrPrompt c gitQ p i = confLookup c >>= \case
                Just True -> queryGit (Text.unpack gitQ) >>= \case
                    Just x -> do setOption c x
                                 return x
-                   Nothing -> do x <- prompt c p i
-                                 setOption c x
-                                 return x
-               _ -> do x <- prompt c p i
-                       setOption c x
-                       return x
+                   Nothing -> promptAndSet
+               _ -> promptAndSet
+  where
+    promptAndSet = do
+      x <- prompt c p i
+      setOption c x
+      return x
+
+firstDirectoryThatExists :: MonadIO m => [FilePath] -> m FilePath
+firstDirectoryThatExists ds = liftIO $ go ds >>= \case
+  Nothing -> do
+    err $ "None of the license directories exist: "
+          <> Text.pack (show ds)
+    exitFailure
+  Just d -> return d
+  where
+    go [] = return Nothing
+    go (d:ds') = do
+      exists <- doesDirectoryExist d
+      if exists
+        then return $ Just d
+        else go ds'
+
 
 -- | Get license from configuration or prompt
 getLicense :: MakePackage Text.Text
 getLicense = do
-    licensesDir <- liftIO $ dataFile "licenses"
+    licensesCustomDir <- do
+      dataDir <- liftIO $ getXdgDirectory XdgData "make-package"
+      return $ dataDir </> "licenses"
+    licensesDataDir <- liftIO $ dataFile "licenses"
+    licensesDir <- firstDirectoryThatExists [licensesCustomDir, licensesDataDir]
     licenses <- map takeBaseName . filter (".license" `isSuffixOf` ) <$>
                     liftIO (getDirectoryContents licensesDir)
     defaultLicense <- confLookup "defaults.license" >>= \case
         Nothing -> return Nothing
-        Just l -> if (l `elem` licenses)
+        Just l -> if l `elem` licenses
                   then return . Just $ Text.pack l
                   else do liftIO . putStrLn $
                               "Warning, configured default license \""
@@ -194,8 +215,12 @@ whenConf option p f = confLookup option >>= \case
 
 -- | Let the user select a string from a list
 selectFrom :: String -> [String] -> MakePackage String
-selectFrom p xs = liftIO $ do
-    runInputT (setComplete cf defaultSettings) (HL.outputStrLn options >> go)
+selectFrom p xs = liftIO $
+  runInputT (setComplete cf defaultSettings) $ do
+    HL.outputStrLn $ "Select one of: "
+    HL.outputStrLn options
+
+    go
   where
     pairs = zip (map show [1:: Int ..]) xs
     options = unlines $ map (\(l,r) -> l <> ") " <> r ) pairs

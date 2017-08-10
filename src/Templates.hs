@@ -13,6 +13,7 @@ import           Control.Monad.Trans
 import qualified Data.Aeson               as Aeson
 import           Data.Map.Strict          (Map)
 import qualified Data.Map.Strict          as Map
+import           Data.Maybe               (fromMaybe)
 import           Data.Monoid
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
@@ -22,7 +23,6 @@ import qualified System.Directory         as Dir
 import           System.FilePath
 import           System.PosixCompat.Files
 import qualified Text.Microstache         as Mustache
-
 
 import           IO
 
@@ -68,11 +68,9 @@ renderTemplates conf from to = do
     -- Construct full file path from filename
     fromFile f = baseDir conf </> from </> f
     -- construct full file path from filename
-    toFile f = to </> case Map.lookup f (renames conf) of
-                        Nothing -> f
-                        Just rep -> rep
+    toFile f = to </> fromMaybe f (Map.lookup f (renames conf))
     skip f = warn $ "Can't read " <> Text.pack f <> ". Skipping."
-    handleRegularFile f = do
+    handleRegularFile f =
       case Map.lookup (takeExtension f) (templateHandlers conf) of
         Just tmpl -> runTmpl tmpl f
         Nothing -> do
@@ -99,10 +97,12 @@ templates packageName substitutions =
 runTemplates :: TemplateConfig -> MakePackage ()
 runTemplates conf = do
   defaultTemplateDir <- liftIO $ Dir.getXdgDirectory Dir.XdgData "make-package"
-  templateDir <- (</> "templates") <$> optionDefault "template.directory" defaultTemplateDir
+  templateDir <-
+    (</> "templates") <$> optionDefault "template.directory" defaultTemplateDir
   Ex.try (liftIO $ Dir.listDirectory templateDir) >>= \case
     Left (_ :: IOError) ->
-      warn $ "Could not read template directory (" <> Text.pack templateDir <> ")"
+      warn $
+      "Could not read template directory (" <> Text.pack templateDir <> ")"
     Right templateNames -> do
       template <- selectFrom "Template" templateNames
       renderTemplates conf (templateDir </> template) (baseDir conf)
