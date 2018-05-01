@@ -22,9 +22,9 @@ cTrue = Conf.Bool True
 cFalse = Conf.Bool False
 
 options :: [OptDescr (MakePackage ())]
-options = [ Option "h" ["help"] (NoArg $ help [])
+options = [ Option "" ["help"] (NoArg $ help [])
               "display this help text"
-          , Option "P" ["package"] (setOpt "package" "string")
+          , Option "" ["package"] (setOpt "package" "string")
               "package name"
           , Option "d" ["dir"] (setOpt "directory" "string")
             "directory to initialize in (default = package name)"
