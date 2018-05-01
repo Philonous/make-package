@@ -70,6 +70,8 @@ options = [ Option "h" ["help"] (NoArg $ help [])
             "github oauth token"
           , Option "P" ["password"] (setOpt "github.auth.password" "string")
             "github password"
+          , Option [] ["resolver"] (setOpt "stack.resolver" "string")
+            "Stack resolver to use"
           ]
 
 help :: MonadIO m => [String] -> m a

@@ -26,12 +26,14 @@ dependencies:
   - github >=0.11
   - haskeline >=0.7
   - lens >=3.10
+  - lens-aeson >= 1.0
   - lens-datetime >=0.2
   - microstache
   - mtl >=2.1
   - process >=1.1
   - text >=0.10
   - time >=1.4
+  - wreq >=0.5.2
   - unix-compat
 executables:
   make-package:

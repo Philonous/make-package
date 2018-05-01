@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -10,6 +11,7 @@ import           Data.Text           (Text)
 import           Github
 import           IO
 import           Options
+import           Stackage
 import           Templates
 
 import           Control.Lens        ((^.), to)
@@ -36,6 +38,7 @@ main = withConfig $ do
   desc <- prompt "description" "Description" ""
   licenseType <- getLicense
   category <- stored "categories"
+  resolver <- getResolver
   now <- liftIO getCurrentTime
   let substitutions :: [(Text, Text)]
       substitutions = [("name"     ,packageName)
@@ -44,6 +47,7 @@ main = withConfig $ do
                       ,("author"   ,author)
                       ,("year"     ,now ^. years . to show . packed)
                       ,("license"  ,licenseType)
+                      ,("stack-resolver", resolver)
                       ]
                       ++ catMaybes [("category",) <$> category]
       templateConf = templates packageName substitutions
