@@ -60,12 +60,13 @@ renderTemplates conf from to = do
     let file = fromFile f
     mbStatus <- liftIO . Ex.try $ getFileStatus file
     case mbStatus of
-      Right status | isRegularFile status -> handleRegularFile f
-                   | isDirectory status -> handleDirectory f
-                   | otherwise -> skip file
+      Right status
+        | isRegularFile status -> handleRegularFile f
+        | isDirectory status -> handleDirectory f
+        | otherwise -> skip file
       Left (_ :: IOError) -> err $ "Can't read file " <> Text.pack file
-  where
     -- Construct full file path from filename
+  where
     fromFile f = baseDir conf </> from </> f
     -- construct full file path from filename
     toFile f = to </> fromMaybe f (Map.lookup f (renames conf))
@@ -76,7 +77,8 @@ renderTemplates conf from to = do
         Nothing -> do
           warn $ Text.pack f <> " : " <> Text.pack (takeExtension f)
           copyVerbatim f
-    runTmpl tmpl f = liftIO . Text.writeFile (toFile f) =<< tmpl (fromFile f)
+    runTmpl tmpl f =
+      liftIO . Text.writeFile (toFile (dropExtension f)) =<< tmpl (fromFile f)
     copyVerbatim f = liftIO $ Dir.copyFile (fromFile f) (toFile f)
     handleDirectory f = do
       let target = to </> f
@@ -104,6 +106,13 @@ runTemplates conf = do
       warn $
       "Could not read template directory (" <> Text.pack templateDir <> ")"
     Right templateNames -> do
-      template <- selectFrom "Template" templateNames
+      template <- stored "template.name" >>= \case
+        Nothing -> selectFrom "Template" templateNames
+        Just str ->
+          if str `elem` templateNames
+          then return str
+          else do
+            err $ Text.pack str <> " is not a valid tamplate name"
+            selectFrom "Template" templateNames
       renderTemplates conf (templateDir </> template) (baseDir conf)
   return ()
