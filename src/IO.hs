@@ -43,7 +43,6 @@ err msg = liftIO $ do
   Text.hPutStrLn stderr $ "Error: " <> msg
   exitFailure
 
-
 withConfig :: MakePackage a -> IO a
 withConfig (MP f) = do conf <- loadConfig
                        fst <$> runReaderT (runStateT f Map.empty) conf
@@ -216,7 +215,7 @@ whenConf option p f = confLookup option >>= \case
 selectFrom :: String -> [String] -> MakePackage String
 selectFrom p xs = liftIO $
   runInputT (setComplete cf defaultSettings) $ do
-    HL.outputStrLn $ "Select one of: "
+    HL.outputStrLn "Select one of: "
     HL.outputStrLn options
 
     go
