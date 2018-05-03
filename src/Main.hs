@@ -12,6 +12,7 @@ import           Github
 import           IO
 import           Options
 import           Stackage
+import           System.FilePath     ((</>))
 import           Templates
 
 import           Control.Lens        ((^.), to)
@@ -22,7 +23,7 @@ import qualified Data.Text           as T
 import           Data.Text.Lens
 import           Data.Time
 import           Data.Time.Lens
-import           System.Directory
+import qualified System.Directory    as Dir
 
 -- import System.Process
 
@@ -40,6 +41,7 @@ main = withConfig $ do
   category <- stored "categories"
   resolver <- getResolver
   now <- liftIO getCurrentTime
+  pwd <- liftIO Dir.getCurrentDirectory
   let substitutions :: [(Text, Text)]
       substitutions = [("name"     ,packageName)
                       ,("desc"     ,desc)
@@ -50,23 +52,24 @@ main = withConfig $ do
                       ,("stack-resolver", resolver)
                       ]
                       ++ catMaybes [("category",) <$> category]
-      templateConf = templates packageName substitutions
   maybeClone packageName packageDir
-  liftIO $ do createDirectoryIfMissing False (T.unpack packageName)
-              setCurrentDirectory (T.unpack packageName)
-  runTemplates templateConf
-  unlessConf "git.enable" (== False) $ do
-    run "git" ["init"]
-    run "git" ["add", "."]
-    whenConf "git.do-commit" (== True) $ do
-      msg <- confLookupDefault "git.initial-commit-message" "initial commit"
-      run "git" ["commit", "-m", msg]
+  liftIO $ Dir.createDirectoryIfMissing False (T.unpack packageDir)
+  mbTemplate <- stored "template.name"
+  let templateConf = templates packageName substitutions (T.unpack packageDir)
+  runTemplate templateConf mbTemplate
+  withCurrentDirectory (T.unpack packageDir) $ do
+    unlessConf "git.enable" (== False) $ do
+      run "git" ["init"]
+      run "git" ["add", "."]
+      whenConf "git.do-commit" (== True) $ do
+        msg <- confLookupDefault "git.initial-commit-message" "initial commit"
+        run "git" ["commit", "-m", msg]
 
-  handleGithub packageName desc
-  run "stack" ["build", "--install-ghc", "--test", "--no-run-tests"]
+    handleGithub packageName desc
+    run "stack" ["build", "--install-ghc", "--test", "--no-run-tests"]
   where
     checkExists pname = liftIO $ do
-      fileExists <- doesFileExist (T.unpack pname)
-      dirExists <- doesDirectoryExist (T.unpack pname)
+      fileExists <- Dir.doesFileExist (T.unpack pname)
+      dirExists <- Dir.doesDirectoryExist (T.unpack pname)
       when (fileExists || dirExists) $
         err $ "File or directory \"" <> pname <>"\" already exists."

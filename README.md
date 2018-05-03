@@ -21,7 +21,13 @@ User configuration files are expected in either of
 
 ## Templates
 
-* Templates are expected in `$XDG_DATA_HOME/make-package/templates` (where `$XDG_DATA_HOME` defaults to `~/.local/share` if unset).
+Template can come from 4 source:
+* Git templates: `git:<git repository>` (accepts any url git accepts)
+* Templates on github: `github:<username>/<repo>` (Must be publicly visible)
+* Directories: `file:<path to directory>`
+
+Named templates in the template directory :
+* Named templates are expected in `$XDG_DATA_HOME/make-package/templates` (where `$XDG_DATA_HOME` defaults to `~/.local/share` if unset).
 * The directory will be copied, files ending in `.mustache` are treated as mustache templates
 
 The following variables are set for template expansion:

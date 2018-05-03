@@ -33,7 +33,10 @@ import           Paths_make_package
 newtype MakePackage a = MP
   { unConf :: StateT (Map Text Conf.Value) (ReaderT Conf.Config IO) a
   } deriving (Monad, MonadIO, Functor, Applicative
-             , Ex.MonadThrow, Ex.MonadCatch)
+             , Ex.MonadThrow, Ex.MonadCatch, Ex.MonadMask)
+
+info :: MonadIO m => Text -> m ()
+info msg = liftIO $ Text.hPutStrLn stderr $ "Info: " <> msg
 
 warn :: MonadIO m => Text -> m ()
 warn msg = liftIO $ Text.hPutStrLn stderr $ "Warning: " <> msg
@@ -42,6 +45,11 @@ err :: MonadIO m => Text -> m ()
 err msg = liftIO $ do
   Text.hPutStrLn stderr $ "Error: " <> msg
   exitFailure
+
+failure :: MonadIO m => Text -> m b
+failure msg = do
+  err msg
+  liftIO $ exitFailure
 
 withConfig :: MakePackage a -> IO a
 withConfig (MP f) = do conf <- loadConfig
@@ -122,13 +130,8 @@ confOrGitOrPromptString c gitQ p i = confLookup c >>= \case
       setOption c (Conf.String x)
       return x
 
-firstDirectoryThatExists :: MonadIO m => [FilePath] -> m FilePath
-firstDirectoryThatExists ds = liftIO $ go ds >>= \case
-  Nothing -> do
-    err $ "None of the license directories exist: "
-          <> Text.pack (show ds)
-    exitFailure
-  Just d -> return d
+firstDirectoryThatExists :: MonadIO m => [FilePath] -> m (Maybe FilePath)
+firstDirectoryThatExists ds = liftIO $ go ds
   where
     go [] = return Nothing
     go (d:ds') = do
@@ -145,7 +148,12 @@ getLicense = do
       dataDir <- liftIO $ getXdgDirectory XdgData "make-package"
       return $ dataDir </> "licenses"
     licensesDataDir <- liftIO $ dataFile "licenses"
-    licensesDir <- firstDirectoryThatExists [licensesCustomDir, licensesDataDir]
+    licensesDir <-
+      firstDirectoryThatExists [licensesCustomDir, licensesDataDir] >>= \case
+        Nothing -> do
+          err "License directory does not exist"
+          liftIO $ exitFailure
+        Just ld -> return ld
     licenses <- map takeBaseName . filter (".license" `isSuffixOf` ) <$>
                     liftIO (getDirectoryContents licensesDir)
     defaultLicense <- confLookup "defaults.license" >>= \case
@@ -158,7 +166,7 @@ getLicense = do
                           return Nothing
     case defaultLicense of
         Just l -> return l
-        Nothing -> Text.pack <$> selectFrom "license" licenses
+        Nothing -> Text.pack <$> selectFrom "license" licenses True
 
 -- | Query git configuration
 queryGit :: String -> MakePackage (Maybe Text.Text)
@@ -212,8 +220,12 @@ whenConf option p f = confLookup option >>= \case
     _ -> return ()
 
 -- | Let the user select a string from a list
-selectFrom :: String -> [String] -> MakePackage String
-selectFrom p xs = liftIO $
+selectFrom :: MonadIO m =>
+              String
+           -> [String]
+           -> Bool -- Strict matching
+           -> m String
+selectFrom p xs isStrict = liftIO $
   runInputT (setComplete cf defaultSettings) $ do
     HL.outputStrLn "Select one of: "
     HL.outputStrLn options
@@ -231,6 +243,7 @@ selectFrom p xs = liftIO $
             Just ln -> return . strip $ ln
         if | ln `elem` xs -> return ln
            | Just line <- ln `lookup` pairs -> return line
+           | not isStrict -> return ln
            | "?" <- ln -> HL.outputStrLn options >> go
            | otherwise -> do
                HL.outputStrLn $ ln ++ " is not valid, type ? to show options"
